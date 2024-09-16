@@ -19,8 +19,9 @@ _BASE_GCS_BUCKET = "gs://elaxtext-us-central2/"
 tz = datetime.timezone.utc
 ft = "%Y-%m-%dT%H:%M:%S%z"
 current_time_in_utc = datetime.datetime.now(tz=tz).strftime(ft)
-EXPERIMENT_NAME = f"pax-{current_time_in_utc}"
+EXPERIMENT_NAME = f"run-t-{current_time_in_utc}"
 EXPERIMENT_BUCKET = os.path.join(_BASE_GCS_BUCKET, EXPERIMENT_NAME)
+COMPILE_CACHE_DIR = os.path.join(_BASE_GCS_BUCKET, "compile_cache")
 STEPS_PER_LOOP = 10
 POLL_RATE_IN_S = 5
 
@@ -33,6 +34,7 @@ MAXTEXT_CONFIG = dict(
     per_device_batch_size=8,
     profiler="xplane",
     global_parameter_scale=1,
+    checkpoint_period=10,
     enable_checkpointing=True,
     remat_policy="full",
     base_emb_dim=6144,
@@ -106,6 +108,11 @@ def setup_loggers():
     logging.basicConfig(level=logging.INFO)
 
 
+def serialize_config_to_name(config: Mapping[str, Any]) -> str:
+    """Seralizes an experiment config to a name."""
+    return f"emb_{config['base_emb_dim']}_kv_{config['base_num_kv_heads']}_q_{config['base_num_query_heads']}_mlp_{config['base_mlp_dim']}_nl_{config['base_num_decoder_layers']}"
+
+
 def main():
     ray.init(runtime_env=dict(worker_process_setup_hook=setup_loggers))
     run_name = get_job_submission_id()
@@ -144,6 +151,13 @@ def main():
 
             pod_type = list(tpu_resources.keys())[0]
             logging.info("Running on pod type: %s", pod_type)
+
+            compile_cache_dir = os.path.join(
+                COMPILE_CACHE_DIR,
+                serialize_config_to_name(config),
+                f"{len(tpu_resources[pod_type])}_{pod_type}")
+            logging.info("Setting compile cache dir to %s", compile_cache_dir)
+            config["jax_cache_dir"] = compile_cache_dir
 
             # TODO - set the batch size, learning rate, dcn setting
             state.handles = RayTpuManager.create_actor(

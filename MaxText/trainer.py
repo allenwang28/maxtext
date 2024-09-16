@@ -108,7 +108,7 @@ class MaxTextTrainer:
         self.config = config
 
     def initialize(self, run_name: str, config: Optional[Mapping[str, Any]] = None):
-        """Initializes"""
+        """Initializes the MaxText trainer."""
         logging.info("Initializing MaxText")
         jax.config.update('jax_default_prng_impl', 'unsafe_rbg')
         self.process_config(run_name=run_name, config=config)
